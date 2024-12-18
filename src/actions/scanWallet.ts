@@ -58,30 +58,42 @@ export const scanWalletAction: Action = {
         try {
             const api = TopWalletsAPI.getInstance();
             const response = await api.scanWallet(address);
-            const walletData = response.data[0];
+            const walletData = response.data;
 
-            const profileText = [
-                "📊 Profile:",
-                walletData.profile.name && `• Name: ${walletData.profile.name}`,
-                walletData.profile.twitterUrl &&
-                    `• Twitter: ${walletData.profile.twitterUrl}`,
-            ]
-                .filter(Boolean)
-                .join("\n");
+            const profileItems = [
+                walletData.name && `• Name: ${walletData.name}`,
+                walletData.twitter_url &&
+                    `• Twitter: ${walletData.twitter_url}`,
+                walletData.type === "kols" && "• Known Trader 🌟",
+            ].filter(Boolean);
 
-            const analysisText = `💰 Performance Analysis:
-• Win Rate: ${walletData.stats.winrate}%
-• Tokens Traded: ${walletData.stats.tokensTraded}
-• Total PnL: ${walletData.stats.combinedPnl}
-• ROI: ${walletData.stats.combinedRoi}
-• Best Trade: ${walletData.stats.topTradePnl || "Unknown"}
-• Total Invested: ${walletData.stats.totalInvested || "Unknown"}`;
+            const profileText =
+                profileItems.length > 0
+                    ? ["👤 Profile:", ...profileItems].join("\n")
+                    : "";
 
-            const responseText = `I've analyzed the wallet ${address}:
+            const analysisText = `💰 Performance Analysis (Last 30 Days):
+• Win Rate: ${walletData.winrate}%
+• Tokens Traded: ${walletData.tokenTraded}
+• Realized PnL: ${walletData.realizedPnl}
+• Combined ROI: ${walletData.combinedRoi}
+• Total Invested: ${walletData.totalInvestedFormatted || "Unknown"}`;
 
-${profileText}
+            const recentTokensText =
+                walletData.recentTokens.length > 0
+                    ? `\n\n🔄 Recent Token Activity:${walletData.recentTokens
+                          .slice(0, 3)
+                          .map(
+                              (token) => `\n• ${token.name} (${token.symbol})
+  Holding: ${token.holding}
+  ROI: ${token.roi}`
+                          )
+                          .join("")}`
+                    : "";
 
-${analysisText}
+            const responseText = `I've analyzed the wallet here is my report:
+${profileText ? `\n${profileText}\n` : ""}
+${analysisText}${recentTokensText}
 
 🔍 View complete analysis: https://www.topwallets.ai/solana/wallet/${address}`;
 

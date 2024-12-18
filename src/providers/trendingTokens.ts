@@ -176,7 +176,7 @@ export const trendingTokensProvider: Provider = {
             return `
 # Top ${params.object.count} Trending Solana Tokens (${params.object.timeframe} timeframe)
 
-you MUST use these tokens to answer the user's question with a more complete response:
+MUST DO: use these tokens to answer the user's question with a more complete response:
 
 ${formattedTokens}
 

@@ -56,7 +56,7 @@ export class TopWalletsAPI {
         try {
             const response = await this.client.post<BotScanWalletResponse>(
                 "/api/bot/solana/scan/wallet",
-                { addresses: [address] }
+                { address }
             );
 
             if (!response.data.success) {

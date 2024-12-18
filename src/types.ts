@@ -1,41 +1,61 @@
 import { z } from "zod";
 import { validTimeframes } from "./services/topwallets-api";
 
-export interface WalletStats {
-    realizedPnl: string;
-    unrealizedPnl: string;
-    combinedPnl: string;
-    realizedRoi: string;
-    unrealizedRoi: string;
-    combinedRoi: string;
-    winrate: number;
-    tokensTraded: number;
-    averageHoldingTime: string;
-    totalInvested: string | null;
-    averageBuyAmount: string | null;
-    totalWins: number;
-    totalLosses: number;
-    lossPercentage: number;
-    topTradePnl: string | null;
-}
+export type TimeframeType = (typeof validTimeframes)[number];
 
-export interface WalletProfile {
-    name: string | null;
-    twitterUrl: string | null;
-    pictureUrl: string | null;
-    type: "normal" | "kols";
+export interface RecentToken {
+    symbol: string;
+    name: string;
+    timestamp: string;
+    holding: number;
+    amount: string;
+    firstBuyTime: string;
+    realizedPnl: string;
+    roi: string;
+    imageUrl: string | null;
 }
 
 export interface WalletData {
+    recentTokens: RecentToken[];
+    score: number;
+    winrateScore: number;
+    pnlScore: number;
+    roiScore: number;
     address: string;
-    stats: WalletStats;
-    profile: WalletProfile;
+    formattedAddress: string;
+    winrate: number;
+    tokenTraded: number;
+    averageHoldingTime: string;
+    realizedPnl: string;
+    unrealizedPnl: string;
+    realizedRoi: string;
+    unrealizedRoi: string;
+    combinedRoi: string;
+    realizedPnlRaw: number;
+    unrealizedPnlRaw: number;
+    realizedRoiRaw: number;
+    unrealizedRoiRaw: number;
+    combinedRoiRaw: number;
+    combinedPnlRaw: number;
+    totalInvested: number | string | null;
+    totalInvestedFormatted: string | null;
+    averageBuyAmount: number | string | null;
+    averageBuyAmountFormatted: string | null;
+    totalWins: number | null | string;
+    totalLosses: number | null | string;
+    lossPercentage: number | null;
+    name: string | null;
+    twitter_url: string | null;
+    picture_url: string | null;
+    type: "normal" | "kols";
+    isFavorite?: boolean;
+    updatedAt: string;
 }
 
 export interface BotScanWalletResponse {
     success: boolean;
     message: string;
-    data: WalletData[];
+    data: WalletData;
 }
 
 export interface TrendingToken {
