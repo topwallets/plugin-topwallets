@@ -1,6 +1,7 @@
 import {
     composeContext,
     elizaLogger,
+    generateObject,
     generateTrueOrFalse,
     IAgentRuntime,
     Memory,
@@ -8,7 +9,8 @@ import {
     Provider,
     State,
 } from "@ai16z/eliza";
-import { TopWalletsAPI } from "../services/topwallets-api";
+import { TopWalletsAPI, validTimeframes } from "../services/topwallets-api";
+import { TrendingTokenResponse } from "../types";
 
 const shouldShowTrendingTemplate = `# Task: Determine if the user is requesting trending or popular tokens information.
 
@@ -27,11 +29,31 @@ Last Message:
 
 Should I show trending tokens? YES or NO`;
 
+const extractParamsTemplate = `# Task: Extract trending tokens request parameters from the conversation.
+
+Look for:
+- Time period mentions (5m, 15m, 30m, 1h, 2h, 3h, 4h, 5h, 6h, 12h, 24h)
+- Number of tokens requested (1-20)
+- Default to 24h timeframe and 5 tokens if not specified
+
+Valid timeframes: ${validTimeframes.join(", ")}
+
+Recent Messages:
+{{recentMessages}}
+
+Return in JSON format:
+\`\`\`json
+{
+    "timeframe": "string (one of the valid timeframes)",
+    "count": "number (1-20)"
+}
+\`\`\``;
+
 export const trendingTokensProvider: Provider = {
     get: async (runtime: IAgentRuntime, message: Memory, state?: State) => {
         try {
             // Skip if message contains a Solana address
-            const text = (message.content as any).text;
+            const text = message.content.text;
             const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
             if (solanaAddressRegex.test(text)) {
                 return "";
@@ -66,28 +88,47 @@ export const trendingTokensProvider: Provider = {
                 return "";
             }
 
+            // Extract parameters if showing trending
+            const paramsContext = composeContext({
+                state: contextState,
+                template: extractParamsTemplate,
+            });
+
+            const params = await generateObject({
+                runtime,
+                context: paramsContext,
+                modelClass: ModelClass.SMALL,
+            });
+
             // Try to get from cache first
-            const cacheKey = "trending-tokens";
-            let trendingTokensResponse =
+            const cacheKey = `trending-tokens-${params.timeframe}-${params.count}`;
+            let trendingTokensResponse: TrendingTokenResponse =
                 await runtime.cacheManager.get(cacheKey);
 
             if (!trendingTokensResponse) {
                 const api = TopWalletsAPI.getInstance();
-                trendingTokensResponse = await api.getTrendingTokens();
+                trendingTokensResponse = await api.getTrendingTokens({
+                    timeframe: params.timeframe,
+                    count: Math.min(Math.max(1, params.count), 20), // Ensure count is between 1 and 20
+                });
 
-                // Cache for 5 minutes
+                // Cache for 1 minute for short timeframes, 5 minutes for longer ones
+                const cacheTime = ["5m", "15m", "30m", "1h"].includes(
+                    params.timeframe
+                )
+                    ? 60
+                    : 300;
                 await runtime.cacheManager.set(
                     cacheKey,
                     trendingTokensResponse,
                     {
-                        expires: 300,
+                        expires: cacheTime,
                     }
                 );
             }
 
             // Format the trending tokens
             const formattedTokens = trendingTokensResponse.data.tokens
-                .slice(0, 5)
                 .map((token, index) => {
                     const price = token.price
                         ? `$${token.price.toFixed(4)}`
@@ -110,7 +151,7 @@ export const trendingTokensProvider: Provider = {
                 .join("\n\n");
 
             return `
-# Top 5 Trending Solana Tokens
+# Top ${params.count} Trending Solana Tokens (${params.timeframe} timeframe)
 
 use these tokens to answer the user's question:
 
