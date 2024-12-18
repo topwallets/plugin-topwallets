@@ -40,7 +40,7 @@ function formatNumber(num: number | null): string {
     return num.toFixed(2);
 }
 
-function analyzeMetrics(token: TokenResponse): string[] {
+function analyzeMetrics(token: TokenResponse["data"]): string[] {
     const metrics: string[] = [];
 
     // Price changes analysis
@@ -111,11 +111,19 @@ export const scanTokenAction: Action = {
 
         try {
             // Extract token information
+            const lastMessage =
+                state?.recentMessagesData?.[
+                    state.recentMessagesData.length - 1
+                ];
+            const contextState = lastMessage
+                ? {
+                      ...state,
+                      recentMessages: lastMessage.content.text,
+                      recentMessagesData: [lastMessage],
+                  }
+                : state;
             const tokenContext = composeContext({
-                state: {
-                    ...state,
-                    recentMessages: [message],
-                },
+                state: contextState,
                 template: tokenAddressTemplate,
             });
 
