@@ -2,9 +2,25 @@ import { elizaLogger } from "@ai16z/eliza";
 import axios, { AxiosInstance } from "axios";
 import {
     BotScanWalletResponse,
+    TimeframeType,
     TokenResponse,
+    TrendingTokenParams,
     TrendingTokenResponse,
 } from "../types";
+
+export const validTimeframes = [
+    "5m",
+    "15m",
+    "30m",
+    "1h",
+    "2h",
+    "3h",
+    "4h",
+    "5h",
+    "6h",
+    "12h",
+    "24h",
+] as const;
 
 export class TopWalletsAPI {
     private client: AxiosInstance;
@@ -57,10 +73,21 @@ export class TopWalletsAPI {
         }
     }
 
-    async getTrendingTokens(): Promise<TrendingTokenResponse> {
+    async getTrendingTokens(
+        params?: TrendingTokenParams
+    ): Promise<TrendingTokenResponse> {
         try {
+            const timeframe = params?.timeframe || "24h";
+            const count = params?.count || 5;
+
+            if (!validTimeframes.includes(timeframe as TimeframeType)) {
+                throw new Error(
+                    `Invalid timeframe. Must be one of: ${validTimeframes.join(", ")}`
+                );
+            }
+
             const response = await this.client.get<TrendingTokenResponse>(
-                "/api/bot/solana/trending-tokens"
+                `/api/bot/solana/trending-tokens?timeframe=${timeframe}&count=${count}`
             );
 
             if (!response.data.success) {

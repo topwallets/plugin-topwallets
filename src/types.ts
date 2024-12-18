@@ -1,3 +1,5 @@
+import { validTimeframes } from "./services/topwallets-api";
+
 export interface WalletStats {
     realizedPnl: string;
     unrealizedPnl: string;
@@ -78,4 +80,11 @@ export interface TokenResponse {
         };
         riskScore: number;
     };
+}
+
+export type TimeframeType = (typeof validTimeframes)[number];
+
+export interface TrendingTokenParams {
+    timeframe?: TimeframeType;
+    count?: number;
 }
