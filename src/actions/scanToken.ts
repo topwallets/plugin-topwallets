@@ -12,12 +12,7 @@ import {
 } from "@ai16z/eliza";
 import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
-import { TokenResponse } from "../types";
-
-interface TokenInfo {
-    contractAddress: string | null;
-    symbol: string | null;
-}
+import { isTokenInfo, TokenInfoSchema, TokenResponse } from "../types";
 
 const tokenAddressTemplate = `# Task: Extract the Solana token address from the conversation.
 
@@ -132,29 +127,36 @@ export const scanTokenAction: Action = {
                 template: tokenAddressTemplate,
             });
 
-            const tokenInfo = (await generateObject({
+            const tokenInfo = await generateObject({
                 runtime,
                 context: tokenContext,
                 modelClass: ModelClass.MEDIUM,
-            })) as unknown as TokenInfo;
+                schema: TokenInfoSchema,
+            });
 
-            if (!tokenInfo.contractAddress) {
+            if (!isTokenInfo(tokenInfo.object)) {
+                throw new Error("Invalid token info");
+            }
+
+            if (!tokenInfo.object.contractAddress) {
                 await callback({
-                    text: tokenInfo.symbol
-                        ? `I'd be happy to analyze ${tokenInfo.symbol} for you, but I need the token address. Could you please provide that?`
-                        : "I'd be happy to analyze this token for you, but I need the token address. Could you please provide that?",
+                    text: tokenInfo.object.symbol
+                        ? `I'd be happy to analyze ${tokenInfo.object.symbol} for you...`
+                        : "I'd be happy to analyze this token for you...",
                     action: "TOKEN_SCAN_RESPONSE",
                 });
                 return true;
             }
 
             const api = TopWalletsAPI.getInstance();
-            const response = await api.getTokenInfo(tokenInfo.contractAddress);
+            const response = await api.getTokenInfo(
+                tokenInfo.object.contractAddress
+            );
             const tokenData = response.data;
 
             // Generate analysis message
             const metrics = analyzeMetrics(tokenData);
-            const chartUrl = `https://dexscreener.com/solana/${tokenInfo.contractAddress}`;
+            const chartUrl = `https://dexscreener.com/solana/${tokenInfo.object.contractAddress}`;
 
             let analysisText = `📊 Token Analysis: ${tokenData.symbol}\n\n`;
             analysisText += `Current Metrics:\n`;

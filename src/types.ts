@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { validTimeframes } from "./services/topwallets-api";
 
 export interface WalletStats {
@@ -82,9 +83,33 @@ export interface TokenResponse {
     };
 }
 
-export type TimeframeType = (typeof validTimeframes)[number];
+export const TrendingTokenSchema = z.object({
+    timeframe: z.enum(validTimeframes),
+    count: z.number().min(1).max(20),
+});
 
-export interface TrendingTokenParams {
-    timeframe?: TimeframeType;
-    count?: number;
-}
+export const TokenInfoSchema = z.object({
+    contractAddress: z.string().nullable(),
+    symbol: z.string().nullable(),
+});
+
+export type TrendingTokenParams = z.infer<typeof TrendingTokenSchema>;
+export type TokenInfo = z.infer<typeof TokenInfoSchema>;
+
+export const isTrendingTokenParams = (
+    object: unknown
+): object is TrendingTokenParams => {
+    if (TrendingTokenSchema.safeParse(object).success) {
+        return true;
+    }
+    console.error("Invalid trending token params:", object);
+    return false;
+};
+
+export const isTokenInfo = (object: unknown): object is TokenInfo => {
+    if (TokenInfoSchema.safeParse(object).success) {
+        return true;
+    }
+    console.error("Invalid token info:", object);
+    return false;
+};
