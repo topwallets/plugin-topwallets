@@ -12,6 +12,12 @@ import {
 import { TopWalletsAPI, validTimeframes } from "../services/topwallets-api";
 import { TrendingTokenResponse } from "../types";
 
+// Add this interface near the top of the file
+interface TrendingTokenParams {
+    timeframe: (typeof validTimeframes)[number];
+    count: number;
+}
+
 const shouldShowTrendingTemplate = `# Task: Determine if the user is requesting trending or popular tokens information.
 
 Look for messages that:
@@ -94,11 +100,11 @@ export const trendingTokensProvider: Provider = {
                 template: extractParamsTemplate,
             });
 
-            const params = await generateObject({
+            const params = (await generateObject({
                 runtime,
                 context: paramsContext,
                 modelClass: ModelClass.SMALL,
-            });
+            })) as unknown as TrendingTokenParams;
 
             // Try to get from cache first
             const cacheKey = `trending-tokens-${params.timeframe}-${params.count}`;

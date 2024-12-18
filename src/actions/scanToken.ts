@@ -14,6 +14,11 @@ import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
 import { TokenResponse } from "../types";
 
+interface TokenInfo {
+    contractAddress: string | null;
+    symbol: string | null;
+}
+
 const tokenAddressTemplate = `# Task: Extract the Solana token address from the conversation.
 
 Look for:
@@ -127,11 +132,11 @@ export const scanTokenAction: Action = {
                 template: tokenAddressTemplate,
             });
 
-            const tokenInfo = await generateObject({
+            const tokenInfo = (await generateObject({
                 runtime,
                 context: tokenContext,
                 modelClass: ModelClass.MEDIUM,
-            });
+            })) as unknown as TokenInfo;
 
             if (!tokenInfo.contractAddress) {
                 await callback({
