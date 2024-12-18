@@ -20,6 +20,11 @@ _note: this plugin is currently in development, not yet published on npm. contac
 - `trendingTokensProvider`: Provides real-time information about trending tokens on Solana
     - Usage: Automatically responds to queries about trending or popular tokens
     - Returns: Top 5 trending tokens with price, market cap, liquidity, and risk metrics
+    - Features:
+        - Customizable timeframes (5m, 15m, 30m, 1h, 2h, 3h, 4h, 5h, 6h, 12h, 24h)
+        - Adjustable number of tokens (1-20)
+        - Intelligent timeframe detection from user queries
+        - Smart caching based on timeframe (1min for short timeframes, 5min for longer)
 
 ## Installation
 
