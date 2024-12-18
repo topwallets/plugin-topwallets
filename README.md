@@ -2,7 +2,7 @@
 
 A plugin for Eliza that provides solana trading data and analysis.
 
-_note: this plugin is currently in development, not yet published on npm. contact us if you have any questions or feedback._
+_note: this plugin is currently in development, not yet published on npm. contact us if you have any questions or feedback: https://x.com/TopwalletsAI | https://t.me/TopWalletsAI_
 
 ## Features
 
