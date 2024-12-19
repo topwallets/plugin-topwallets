@@ -79,8 +79,8 @@ interface TokenContext {
     riskMetrics: {
         riskScore: number;
         isRugged: boolean;
-        liquidityRisk: "VERY_LOW" | "LOW" | "MODERATE" | "HEALTHY";
-        marketCapRisk: "VERY_HIGH" | "HIGH" | "MODERATE" | "LOW";
+        liquidityStatus: "CRITICAL" | "LOW" | "DECENT" | "SOLID";
+        marketCapCategory: "MICRO_CAP" | "NANO_CAP" | "SMALL_CAP" | "BASED";
     };
     priceAction: {
         significantMoves: Array<{
@@ -89,32 +89,33 @@ interface TokenContext {
             direction: "gain" | "loss";
         }>;
     };
-    socialMetrics: {
-        hasTelegram: boolean;
-        hasTwitter: boolean;
-    };
-    smartMoney: {
-        topTradersCount: number;
-        successfulTradersCount: number;
-        averageWinRate: number;
+    influencers: {
+        hasKols: boolean;
+        kolNames: string[];
     };
 }
 
+function extractTwitterHandle(url: string | null): string | null {
+    if (!url) return null;
+    const match = url.match(/twitter\.com\/([^/]+)/);
+    return match ? `@${match[1]}` : null;
+}
+
 function structureTokenData(token: TokenResponse["data"]): TokenContext {
-    // Determine liquidity risk level
-    const getLiquidityRisk = (liquidity: number | null) => {
-        if (!liquidity || liquidity < 10000) return "VERY_LOW";
+    // Determine liquidity status
+    const getLiquidityStatus = (liquidity: number | null) => {
+        if (!liquidity || liquidity < 10000) return "CRITICAL";
         if (liquidity < 50000) return "LOW";
-        if (liquidity < 100000) return "MODERATE";
-        return "HEALTHY";
+        if (liquidity < 100000) return "DECENT";
+        return "SOLID";
     };
 
-    // Determine market cap risk level
-    const getMarketCapRisk = (marketCap: number | null) => {
-        if (!marketCap || marketCap < 100000) return "VERY_HIGH";
-        if (marketCap < 1000000) return "HIGH";
-        if (marketCap < 5000000) return "MODERATE";
-        return "LOW";
+    // Determine market cap category
+    const getMarketCapCategory = (marketCap: number | null) => {
+        if (!marketCap || marketCap < 100000) return "MICRO_CAP";
+        if (marketCap < 1000000) return "NANO_CAP";
+        if (marketCap < 5000000) return "SMALL_CAP";
+        return "BASED";
     };
 
     // Get significant price movements
@@ -126,12 +127,11 @@ function structureTokenData(token: TokenResponse["data"]): TokenContext {
             direction: change > 0 ? ("gain" as const) : ("loss" as const),
         }));
 
-    // Calculate smart money metrics
-    const topTraders = token.topWallets || [];
-    const successfulTraders = topTraders.filter((w) => w.winrate > 0.6);
-    const averageWinRate = topTraders.length
-        ? topTraders.reduce((acc, w) => acc + w.winrate, 0) / topTraders.length
-        : 0;
+    // Find KOLs and extract Twitter handles
+    const kols = token.topWallets?.filter((w) => w.type === "kols") || [];
+    const kolHandles = kols
+        .map((k) => extractTwitterHandle(k.twitter_url) || k.name || k.address)
+        .filter(Boolean);
 
     return {
         basicInfo: {
@@ -144,61 +144,86 @@ function structureTokenData(token: TokenResponse["data"]): TokenContext {
         riskMetrics: {
             riskScore: token.riskScore,
             isRugged: token.isRugged,
-            liquidityRisk: getLiquidityRisk(token.liquidity),
-            marketCapRisk: getMarketCapRisk(token.marketCap),
+            liquidityStatus: getLiquidityStatus(token.liquidity),
+            marketCapCategory: getMarketCapCategory(token.marketCap),
         },
         priceAction: {
             significantMoves,
         },
-        socialMetrics: {
-            hasTelegram: !!token.social?.telegram,
-            hasTwitter: !!token.social?.twitter,
-        },
-        smartMoney: {
-            topTradersCount: topTraders.length,
-            successfulTradersCount: successfulTraders.length,
-            averageWinRate,
+        influencers: {
+            hasKols: kols.length > 0,
+            kolNames: kolHandles,
         },
     };
 }
 
-// Add analysis template
-const tokenAnalysisTemplate = `# Task: As {{agentName}}, analyze this token data and provide insights
+// Update the template to use simpler conditionals since we're not using Handlebars
+const tokenAnalysisTemplate = `
+# Task: As {{agentName}}, analyze this token data and provide insights
 
-Background Context:
+About {{agentName}}:
 {{bio}}
+
+Lore:
+{{lore}}
+
+## Token data
 
 Token Information:
 - Name: {{tokenName}}
-- Description: {{tokenDescription}}
+{{#if hasDescription}}
+- Concept: {{tokenDescription}}
+{{/if}}
 - Symbol: {{tokenSymbol}}
-- Price: {{ tokenPrice }}
-- Market Cap: {{ tokenMarketCap }}
-- Liquidity: {{ tokenLiquidity }}
-- Risk Score: {{tokenRiskScore}}/10
+- Price: {{tokenPrice}}
+- Market Cap: {{tokenMarketCap}}
+- Liquidity: {{tokenLiquidity}}
+- Risk Score: {{tokenRiskScore}}/10. 0 is the lowest it means no risk detection and 10 is the highest means the highest risk detection.
 - Is Rugged: {{isRugged}}
 
-Risk Analysis:
-- Liquidity Risk Level: {{liquidityRisk}}
-- Market Cap Risk Level: {{marketCapRisk}}
+Metrics Analysis:
+- Liquidity Level: {{liquidityStatus}}
+- Market Cap Level: {{marketCapCategory}}
 
 Price Action:
 {{priceChanges}}
 
-Smart Money Metrics:
-- Total Top Traders: {{topTradersCount}}
-- Successful Traders: {{successfulTradersCount}}
-- Average Win Rate: {{averageWinRate}}%
+{{#if hasKols}}
+Notable Traders: {{kolNames}}
+{{/if}}
 
 Analyze this token considering:
 1. Overall risk assessment
 2. Market analysis (liquidity, market cap)
 3. Recent price movements
-4. Smart money involvement
-5. Project maturity indicators
-6. Final recommendation
+4. Project concept and potential
 
-As {{agentName}}, your MUST give your personal take on this token in ONLY two sentences and a maximum of 200 characters. You can tell us what you think the project concept and if you would recommend it.`;
+## Examples of {{agentName}} answers for inspiration depending on the token
+
+- With a $217K market cap and 0/10 risk score, {{ tokenSymbol }} is a speculative memecoin play for degens—approach with caution.
+- The 17.22% 24-hour gain for {{ tokenSymbol }} is impressive, but $91K liquidity means potential high slippage—trade carefully.
+- Top wallet Bwif...Snia's 1,015.7% PnL suggests {{ tokenSymbol }} has attracted smart money, but can retail investors catch up?
+- At $0.000218, {{ tokenSymbol }} looks cheap, but its gains are likely driven by hype rather than fundamentals.
+- {{ tokenSymbol }} shows exciting momentum with a 19.64% 12-hour gain, but the 0/10 risk score is a red flag for long-term holders.
+- Liquidity of $91K suggests {{ tokenSymbol }} is an early-stage token, but its meme narrative could bring volatility spikes.
+- Key wallets like 9e74...YjRg with 40.1% win rates signal interest in {{ tokenSymbol }}, but 0% 30-day change implies cautious positioning.
+- Moderate liquidity and sharp price movements show {{ tokenSymbol }} is primed for short-term traders—not long-term believers.
+- If {{ tokenSymbol }} can grow beyond its meme status, it might mature, but for now, it's a plankton in crypto's vast ocean.
+- {{ tokenSymbol }}'s sharp gains over 24 hours are enticing, but remember, low liquidity and high risk scores often mean pump-and-dump potential.
+
+## TODO
+
+As {{agentName}},
+- your MUST give your personal take on this token in ONLY two sentences and a maximum of 200 characters.
+- Use the analysis above and find the most relevant information to make your decision.
+- NEVER mention the risk score or the risk metrics directly in your answer.
+{{#if hasDescription}}
+- Tell us what you think about the project concept and if you would recommend it.
+{{/if}}
+{{#if hasKols}}
+- Mention the notable traders involvement as a positive signal.
+{{/if}}
+`;
 
 export async function generateAIAnalysis(
     token: TokenResponse["data"],
@@ -207,37 +232,42 @@ export async function generateAIAnalysis(
 ): Promise<string> {
     const tokenData = structureTokenData(token);
 
+    // Check if description is meaningful (at least 30 chars)
+    const hasValidDescription =
+        token.description && token.description.length >= 30;
+
     // Flatten the data for the template
     const analysisState: State = {
         ...state,
         tokenName: token.name,
-        tokenDescription: token.description || "No description available",
+        tokenDescription: hasValidDescription
+            ? token.description
+            : "No detailed description available",
+        hasDescription: hasValidDescription,
         tokenSymbol: token.symbol,
         tokenPrice: token.price?.toFixed(6) || "N/A",
         tokenMarketCap: formatNumber(token.marketCap),
         tokenLiquidity: formatNumber(token.liquidity),
         tokenRiskScore: token.riskScore,
         isRugged: token.isRugged,
-        liquidityRisk: tokenData.riskMetrics.liquidityRisk,
-        marketCapRisk: tokenData.riskMetrics.marketCapRisk,
+        liquidityStatus: tokenData.riskMetrics.liquidityStatus,
+        marketCapCategory: tokenData.riskMetrics.marketCapCategory,
         priceChanges: tokenData.priceAction.significantMoves
             .map(
                 (m) =>
                     `- ${m.timeframe}: ${m.change.toFixed(2)}% ${m.direction}`
             )
             .join("\n"),
-        topTradersCount: tokenData.smartMoney.topTradersCount,
-        successfulTradersCount: tokenData.smartMoney.successfulTradersCount,
-        averageWinRate: (tokenData.smartMoney.averageWinRate * 100).toFixed(1),
+        hasKols: tokenData.influencers.hasKols,
+        kolNames: tokenData.influencers.kolNames.join(", "),
     };
 
     // Compose context for AI analysis
     const context = composeContext({
         state: analysisState,
         template: tokenAnalysisTemplate,
+        templatingEngine: "handlebars",
     });
-
-    console.log("Context Analysis:", context);
 
     // Generate AI response
     const response = await generateText({
@@ -245,8 +275,6 @@ export async function generateAIAnalysis(
         context,
         modelClass: ModelClass.LARGE,
     });
-
-    console.log("Response Analysis:", response);
 
     return response;
 }

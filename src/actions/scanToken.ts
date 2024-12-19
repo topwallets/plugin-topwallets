@@ -9,7 +9,7 @@ import {
 } from "@ai16z/eliza";
 import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
-import { TokenResponse } from "../types";
+import { Source, TokenResponse } from "../types";
 import {
     analyzeMetrics,
     formatNumber,
@@ -52,24 +52,6 @@ export const scanTokenAction: Action = {
         const text = (message.content as Content).text;
         const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
-        elizaLogger.debug("Validating scanToken action", {
-            text,
-            hasText: !!text,
-            isString: typeof text === "string",
-            matchesRegex:
-                text && typeof text === "string"
-                    ? solanaAddressRegex.test(text)
-                    : false,
-            hasTokenSymbol:
-                text && typeof text === "string"
-                    ? /\$[A-Za-z]+/i.test(text)
-                    : false,
-            hasTokenKeywords:
-                text && typeof text === "string"
-                    ? /token|price|analysis/i.test(text)
-                    : false,
-        });
-
         if (!text || typeof text !== "string") {
             return false;
         }
@@ -91,6 +73,11 @@ export const scanTokenAction: Action = {
             throw new Error("Callback is required for scanToken action");
         }
 
+        console.log("scanToken action", {
+            state,
+        });
+
+        const source = state.source as Source;
         const text = (message.content as Content).text;
         const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
         const matches = text.match(solanaAddressRegex);
@@ -104,7 +91,6 @@ export const scanTokenAction: Action = {
         if (!matches?.length) {
             await callback({
                 text: "I couldn't find a valid token address. Please provide a valid Solana token address.",
-                action: "TOKEN_SCAN_RESPONSE",
             });
             return true;
         }
@@ -127,71 +113,89 @@ export const scanTokenAction: Action = {
             const metrics = analyzeMetrics(tokenData);
             const chartUrl = `https://dexscreener.com/solana/${address}`;
 
-            let analysisText = `📊 Token Analysis: ${tokenData.symbol}\n\n`;
+            let analysisText = `${await generateAIAnalysis(tokenData, state, runtime)} Here are some details I found about it:\n\n`;
 
-            analysisText += `Token Information:\n`;
-            analysisText += `• Name: ${tokenData.name}\n`;
-            analysisText += `• Address: ${address}\n`;
-            if (tokenData.description) {
+            analysisText += `📊 Token Analysis:\n`;
+
+            if (source === "telegram" && tokenData.description) {
+                analysisText += `Token Information:\n`;
+                analysisText += `• Name: ${tokenData.name}\n`;
+                analysisText += `• Address: ${address}\n`;
                 analysisText += `• Description: ${tokenData.description}\n`;
+                analysisText += `\nFinancial Metrics:\n`;
             }
 
-            analysisText += `\nFinancial Metrics:\n`;
             analysisText += `• Price: $${tokenData.price?.toFixed(6) || "N/A"}\n`;
             analysisText += `• Market Cap: $${formatNumber(tokenData.marketCap)}\n`;
             analysisText += `• Liquidity: $${formatNumber(tokenData.liquidity)}\n`;
-
-            analysisText += `\nRisk Assessment:\n`;
             analysisText += `• Risk Score: ${tokenData.riskScore}/10\n`;
+            if (source !== "telegram") {
+                const priceChange24h = tokenData.priceChange["24h"];
+                const changeIcon = priceChange24h >= 0 ? "📈" : "📉";
+                analysisText += `• 24h Change: ${changeIcon} ${priceChange24h?.toFixed(2) || "0"}%\n`;
+            }
+
             if (tokenData.isRugged) {
                 analysisText += `• 🚨 RUG PULL WARNING: This token has been flagged as potentially rugged!\n`;
             }
 
-            if (metrics.length > 0) {
+            if (source === "telegram" && metrics.length > 0) {
                 analysisText += `\nKey Observations:\n${metrics.map((m) => `• ${m}`).join("\n")}\n`;
-            }
-
-            if (tokenData.social?.telegram || tokenData.social?.twitter) {
-                analysisText += `\nSocial Links:\n`;
-                if (tokenData.social.telegram) {
-                    analysisText += `• Telegram: ${tokenData.social.telegram}\n`;
-                }
-                if (tokenData.social.twitter) {
-                    analysisText += `• Twitter: ${tokenData.social.twitter}\n`;
+                if (tokenData.social?.telegram || tokenData.social?.twitter) {
+                    analysisText += `\nSocial Links:\n`;
+                    if (tokenData.social.telegram) {
+                        analysisText += `• Telegram: ${tokenData.social.telegram}\n`;
+                    }
+                    if (tokenData.social.twitter) {
+                        analysisText += `• Twitter: ${tokenData.social.twitter}\n`;
+                    }
                 }
             }
 
             if (tokenData.topWallets && tokenData.topWallets.length > 0) {
-                analysisText += `\n📊 Top Wallets Trading This Token:\n`;
-                tokenData.topWallets.slice(0, 5).forEach((wallet, index) => {
-                    const medal = getMedalEmoji(index);
-                    const name = formatWalletName(wallet);
-                    const winrate = (wallet.winrate * 100).toFixed(1);
+                // Show 5 wallets for telegram, 1 for other sources
+                const walletsToShow = source === "telegram" ? 5 : 1;
 
-                    analysisText += `${medal} ${name}\n`;
-                    analysisText += `   • Win Rate: ${winrate}%\n`;
+                if (source === "telegram") {
+                    analysisText += `\n📊 Top Wallets Trading This Token:\n`;
+                    tokenData.topWallets
+                        .slice(0, walletsToShow)
+                        .forEach((wallet, index) => {
+                            const medal = getMedalEmoji(index);
+                            const name = formatWalletName(wallet);
 
-                    if (wallet.historic30d) {
-                        const pnl = wallet.historic30d.realizedPnl;
-                        const change = wallet.historic30d.percentageChange;
+                            analysisText += `${medal} ${name}\n`;
+                            analysisText += `   • Win Rate: ${wallet.winrate}%\n`;
+
+                            if (wallet.historic30d) {
+                                const pnl = wallet.historic30d.realizedPnl;
+                                const change =
+                                    wallet.historic30d.percentageChange;
+                                const changeIcon = change >= 0 ? "📈" : "📉";
+                                analysisText += `   • 30d PnL: ${pnl}\n`;
+                                analysisText += `   • 30d Change: ${changeIcon} ${change.toFixed(1)}%\n`;
+                            }
+                            analysisText += "\n";
+                        });
+                } else {
+                    const topWallet = tokenData.topWallets[0];
+                    const name = formatWalletName(topWallet);
+
+                    analysisText += `• Top Wallet: ${name} (${topWallet.winrate}% WR)`;
+                    if (topWallet.historic30d) {
+                        const change = topWallet.historic30d.percentageChange;
                         const changeIcon = change >= 0 ? "📈" : "📉";
-                        analysisText += `   • 30d PnL: ${pnl}\n`;
-                        analysisText += `   • 30d Change: ${changeIcon} ${change.toFixed(1)}%\n`;
+                        analysisText += ` ${changeIcon} ${change.toFixed(1)}%\n`;
                     }
-                    analysisText += "\n";
-                });
+                }
 
                 analysisText += `\n🔍 View more top wallets: https://www.topwallets.ai/solana/token/${address}\n`;
             }
 
             analysisText += `\n🔍 View detailed chart: ${chartUrl}`;
 
-            analysisText += `\n\n${await generateAIAnalysis(tokenData, state, runtime)}\n`;
-
             await callback({
                 text: analysisText,
-                action: "TOKEN_SCAN_RESPONSE",
-                source: message.content.source,
             });
 
             return true;
@@ -213,10 +217,11 @@ export const scanTokenAction: Action = {
 
             console.log(error);
 
-            await callback({
-                text: errorMessage,
-                action: "TOKEN_SCAN_RESPONSE",
-            });
+            if (source === "telegram") {
+                await callback({
+                    text: errorMessage,
+                });
+            }
 
             return true;
         }

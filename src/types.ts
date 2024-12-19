@@ -3,6 +3,8 @@ import { validTimeframes } from "./services/topwallets-api";
 
 export type TimeframeType = (typeof validTimeframes)[number];
 
+export type Source = "telegram" | "twitter" | "discord" | "unknown";
+
 export interface RecentToken {
     symbol: string;
     name: string;
