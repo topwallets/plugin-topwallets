@@ -72,6 +72,28 @@ function analyzeMetrics(token: TokenResponse["data"]): string[] {
     return metrics;
 }
 
+function getMedalEmoji(index: number): string {
+    switch (index) {
+        case 0:
+            return "🥇";
+        case 1:
+            return "🥈";
+        case 2:
+            return "🥉";
+        default:
+            return "•";
+    }
+}
+
+function formatWalletName(
+    wallet: TokenResponse["data"]["topWallets"][0]
+): string {
+    const name =
+        wallet.name ||
+        wallet.address.slice(0, 4) + "..." + wallet.address.slice(-4);
+    return wallet.type === "kols" ? `⭐ ${name}` : name;
+}
+
 export const scanTokenAction: Action = {
     name: "SCAN_TOKEN",
     similes: [
@@ -193,6 +215,29 @@ export const scanTokenAction: Action = {
                 if (tokenData.social.twitter) {
                     analysisText += `• Twitter: ${tokenData.social.twitter}\n`;
                 }
+            }
+
+            if (tokenData.topWallets && tokenData.topWallets.length > 0) {
+                analysisText += `\n📊 Top Wallets Trading This Token:\n`;
+                tokenData.topWallets.slice(0, 5).forEach((wallet, index) => {
+                    const medal = getMedalEmoji(index);
+                    const name = formatWalletName(wallet);
+                    const winrate = (wallet.winrate * 100).toFixed(1);
+
+                    analysisText += `${medal} ${name}\n`;
+                    analysisText += `   • Win Rate: ${winrate}%\n`;
+
+                    if (wallet.historic30d) {
+                        const pnl = wallet.historic30d.realizedPnl;
+                        const change = wallet.historic30d.percentageChange;
+                        const changeIcon = change >= 0 ? "📈" : "📉";
+                        analysisText += `   • 30d PnL: ${pnl}\n`;
+                        analysisText += `   • 30d Change: ${changeIcon} ${change.toFixed(1)}%\n`;
+                    }
+                    analysisText += "\n";
+                });
+
+                analysisText += `\n🔍 View more top wallets: https://www.topwallets.ai/solana/token/${address}\n`;
             }
 
             analysisText += `\n🔍 View detailed chart: ${chartUrl}`;

@@ -111,6 +111,23 @@ export interface TokenResponse {
         };
         riskScore: number;
         isRugged: boolean;
+        topWallets: {
+            address: string;
+            name: string | null;
+            twitter_url: string | null;
+            picture_url: string | null;
+            type: string;
+            realizedPnl: string;
+            realizedPnlRaw: number;
+            winrate: number;
+            score: number;
+            historic30d: {
+                realizedPnl: string;
+                realizedPnlRaw: number;
+                totalChange: number;
+                percentageChange: number;
+            } | null;
+        }[];
     };
 }
 
