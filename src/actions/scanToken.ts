@@ -10,67 +10,11 @@ import {
 import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
 import { TokenResponse } from "../types";
-
-function formatNumber(num: number | null): string {
-    if (!num) return "N/A";
-    if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
-    return num.toFixed(2);
-}
-
-function analyzeMetrics(token: TokenResponse["data"]): string[] {
-    const metrics: string[] = [];
-
-    if (token.isRugged) {
-        metrics.push(
-            "🚨 WARNING: This token has been identified as potentially rugged!"
-        );
-    }
-
-    const timeframes = [
-        "1m",
-        "5m",
-        "15m",
-        "30m",
-        "1h",
-        "2h",
-        "3h",
-        "4h",
-        "5h",
-        "6h",
-        "12h",
-        "24h",
-    ] as const;
-
-    timeframes.forEach((timeframe) => {
-        const change = token.priceChange[timeframe];
-        if (change && Math.abs(change) > 5) {
-            metrics.push(
-                `${change > 0 ? "📈" : "📉"} ${Math.abs(change).toFixed(2)}% ${
-                    change > 0 ? "gain" : "loss"
-                } in ${timeframe}`
-            );
-        }
-    });
-
-    if (token.liquidity) {
-        if (token.liquidity < 10000) {
-            metrics.push("🚨 Very low liquidity - high risk of price impact");
-        } else if (token.liquidity < 50000) {
-            metrics.push("⚠️ Low liquidity - moderate risk of price impact");
-        } else if (token.liquidity < 100000) {
-            metrics.push("ℹ️ Moderate liquidity");
-        }
-    }
-
-    if (token.riskScore >= 7) {
-        metrics.push("🚨 High risk score - exercise extreme caution");
-    } else if (token.riskScore >= 5) {
-        metrics.push("⚠️ Moderate risk score - proceed with caution");
-    }
-
-    return metrics;
-}
+import {
+    analyzeMetrics,
+    formatNumber,
+    generateAIAnalysis,
+} from "../utils/analysis";
 
 function getMedalEmoji(index: number): string {
     switch (index) {
@@ -241,6 +185,8 @@ export const scanTokenAction: Action = {
             }
 
             analysisText += `\n🔍 View detailed chart: ${chartUrl}`;
+
+            analysisText += `\n\n${await generateAIAnalysis(tokenData, state, runtime)}\n`;
 
             await callback({
                 text: analysisText,
