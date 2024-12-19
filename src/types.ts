@@ -96,10 +96,21 @@ export interface TokenResponse {
         marketCap: number | null;
         liquidity: number | null;
         priceChange: {
+            "1m": number | null;
+            "5m": number | null;
+            "15m": number | null;
+            "30m": number | null;
             "1h": number | null;
+            "2h": number | null;
+            "3h": number | null;
+            "4h": number | null;
+            "5h": number | null;
+            "6h": number | null;
+            "12h": number | null;
             "24h": number | null;
         };
         riskScore: number;
+        isRugged: boolean;
     };
 }
 

@@ -1,37 +1,15 @@
 import {
     Action,
-    composeContext,
     Content,
     elizaLogger,
-    generateObject,
     HandlerCallback,
     IAgentRuntime,
     Memory,
-    ModelClass,
     State,
 } from "@ai16z/eliza";
 import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
-import { isTokenInfo, TokenInfoSchema, TokenResponse } from "../types";
-
-const tokenAddressTemplate = `# Task: Extract the Solana token address from the conversation.
-
-Look for:
-- Solana token addresses (MUST BE a 32 to 44 characters, alphanumeric)
-- Token symbols or names mentioned with $ prefix
-- Contract addresses mentioned in context of analysis requests
-- if no token address is found, return null
-
-Recent Messages:
-{{recentMessages}}
-
-Return in JSON format:
-\`\`\`json
-{
-    "contractAddress": "string | null",
-    "symbol": "string | null"
-}
-\`\`\``;
+import { TokenResponse } from "../types";
 
 function formatNumber(num: number | null): string {
     if (!num) return "N/A";
@@ -43,31 +21,52 @@ function formatNumber(num: number | null): string {
 function analyzeMetrics(token: TokenResponse["data"]): string[] {
     const metrics: string[] = [];
 
-    // Price changes analysis
-    if (token.priceChange) {
-        const changes = [
-            { period: "1h", value: token.priceChange["1h"] },
-            { period: "24h", value: token.priceChange["24h"] },
-        ].filter((change) => change.value !== null);
-
-        changes.forEach(({ period, value }) => {
-            if (value && Math.abs(value) > 5) {
-                metrics.push(
-                    `${value > 0 ? "📈" : "📉"} ${Math.abs(value).toFixed(
-                        2
-                    )}% ${value > 0 ? "gain" : "loss"} in ${period}`
-                );
-            }
-        });
+    if (token.isRugged) {
+        metrics.push(
+            "🚨 WARNING: This token has been identified as potentially rugged!"
+        );
     }
 
-    // Liquidity analysis
+    const timeframes = [
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "3h",
+        "4h",
+        "5h",
+        "6h",
+        "12h",
+        "24h",
+    ] as const;
+
+    timeframes.forEach((timeframe) => {
+        const change = token.priceChange[timeframe];
+        if (change && Math.abs(change) > 5) {
+            metrics.push(
+                `${change > 0 ? "📈" : "📉"} ${Math.abs(change).toFixed(2)}% ${
+                    change > 0 ? "gain" : "loss"
+                } in ${timeframe}`
+            );
+        }
+    });
+
     if (token.liquidity) {
         if (token.liquidity < 10000) {
-            metrics.push("⚠️ Very low liquidity - high risk of price impact");
+            metrics.push("🚨 Very low liquidity - high risk of price impact");
         } else if (token.liquidity < 50000) {
             metrics.push("⚠️ Low liquidity - moderate risk of price impact");
+        } else if (token.liquidity < 100000) {
+            metrics.push("ℹ️ Moderate liquidity");
         }
+    }
+
+    if (token.riskScore >= 7) {
+        metrics.push("🚨 High risk score - exercise extreme caution");
+    } else if (token.riskScore >= 5) {
+        metrics.push("⚠️ Moderate risk score - proceed with caution");
     }
 
     return metrics;
@@ -87,11 +86,28 @@ export const scanTokenAction: Action = {
         const text = (message.content as Content).text;
         const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
+        elizaLogger.debug("Validating scanToken action", {
+            text,
+            hasText: !!text,
+            isString: typeof text === "string",
+            matchesRegex:
+                text && typeof text === "string"
+                    ? solanaAddressRegex.test(text)
+                    : false,
+            hasTokenSymbol:
+                text && typeof text === "string"
+                    ? /\$[A-Za-z]+/i.test(text)
+                    : false,
+            hasTokenKeywords:
+                text && typeof text === "string"
+                    ? /token|price|analysis/i.test(text)
+                    : false,
+        });
+
         if (!text || typeof text !== "string") {
             return false;
         }
 
-        // Check for token address or token-related keywords
         return (
             solanaAddressRegex.test(text) ||
             /\$[A-Za-z]+/i.test(text) ||
@@ -109,68 +125,68 @@ export const scanTokenAction: Action = {
             throw new Error("Callback is required for scanToken action");
         }
 
+        const text = (message.content as Content).text;
+        const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+        const matches = text.match(solanaAddressRegex);
+
+        elizaLogger.debug("Processing scanToken request", {
+            text,
+            matches,
+            hasMatches: !!matches?.length,
+        });
+
+        if (!matches?.length) {
+            await callback({
+                text: "I couldn't find a valid token address. Please provide a valid Solana token address.",
+                action: "TOKEN_SCAN_RESPONSE",
+            });
+            return true;
+        }
+
+        const address = matches[0];
+
         try {
-            // Extract token information
-            const lastMessage =
-                state?.recentMessagesData?.[
-                    state.recentMessagesData.length - 1
-                ];
-            const contextState = lastMessage
-                ? {
-                      ...state,
-                      recentMessages: lastMessage.content.text,
-                      recentMessagesData: [lastMessage],
-                  }
-                : state;
-            const tokenContext = composeContext({
-                state: contextState,
-                template: tokenAddressTemplate,
-            });
-
-            const tokenInfo = await generateObject({
-                runtime,
-                context: tokenContext,
-                modelClass: ModelClass.MEDIUM,
-                schema: TokenInfoSchema,
-            });
-
-            if (!isTokenInfo(tokenInfo.object)) {
-                throw new Error("Invalid token info");
-            }
-
-            if (!tokenInfo.object.contractAddress) {
-                await callback({
-                    text: tokenInfo.object.symbol
-                        ? `I'd be happy to analyze ${tokenInfo.object.symbol} for you...`
-                        : "I'd be happy to analyze this token for you...",
-                    action: "TOKEN_SCAN_RESPONSE",
-                });
-                return true;
-            }
-
             const api = TopWalletsAPI.getInstance();
-            const response = await api.getTokenInfo(
-                tokenInfo.object.contractAddress
-            );
+            const response = await api.getTokenInfo(address);
             const tokenData = response.data;
 
-            // Generate analysis message
+            elizaLogger.debug("Token data received", {
+                address,
+                symbol: tokenData.symbol,
+                hasPrice: !!tokenData.price,
+                hasLiquidity: !!tokenData.liquidity,
+                hasSocial: !!tokenData.social,
+            });
+
             const metrics = analyzeMetrics(tokenData);
-            const chartUrl = `https://dexscreener.com/solana/${tokenInfo.object.contractAddress}`;
+            const chartUrl = `https://dexscreener.com/solana/${address}`;
 
             let analysisText = `📊 Token Analysis: ${tokenData.symbol}\n\n`;
-            analysisText += `Current Metrics:\n`;
+
+            analysisText += `Token Information:\n`;
+            analysisText += `• Name: ${tokenData.name}\n`;
+            analysisText += `• Address: ${address}\n`;
+            if (tokenData.description) {
+                analysisText += `• Description: ${tokenData.description}\n`;
+            }
+
+            analysisText += `\nFinancial Metrics:\n`;
             analysisText += `• Price: $${tokenData.price?.toFixed(6) || "N/A"}\n`;
             analysisText += `• Market Cap: $${formatNumber(tokenData.marketCap)}\n`;
             analysisText += `• Liquidity: $${formatNumber(tokenData.liquidity)}\n`;
-            analysisText += `• Risk Score: ${tokenData.riskScore}/10\n\n`;
+
+            analysisText += `\nRisk Assessment:\n`;
+            analysisText += `• Risk Score: ${tokenData.riskScore}/10\n`;
+            if (tokenData.isRugged) {
+                analysisText += `• 🚨 RUG PULL WARNING: This token has been flagged as potentially rugged!\n`;
+            }
 
             if (metrics.length > 0) {
-                analysisText += `Analysis:\n${metrics.join("\n")}\n\n`;
+                analysisText += `\nKey Observations:\n${metrics.map((m) => `• ${m}`).join("\n")}\n`;
             }
 
             if (tokenData.social?.telegram || tokenData.social?.twitter) {
-                analysisText += `Social Links:\n`;
+                analysisText += `\nSocial Links:\n`;
                 if (tokenData.social.telegram) {
                     analysisText += `• Telegram: ${tokenData.social.telegram}\n`;
                 }
@@ -179,7 +195,7 @@ export const scanTokenAction: Action = {
                 }
             }
 
-            analysisText += `\n🔍 View chart: ${chartUrl}`;
+            analysisText += `\n🔍 View detailed chart: ${chartUrl}`;
 
             await callback({
                 text: analysisText,
@@ -189,11 +205,22 @@ export const scanTokenAction: Action = {
 
             return true;
         } catch (error) {
-            elizaLogger.error("Token scan error", { error });
+            elizaLogger.error("Token scan error", {
+                error,
+                address,
+                errorMessage: isAxiosError(error)
+                    ? error.response?.data?.message || error.message
+                    : error instanceof Error
+                      ? error.message
+                      : "Unknown error",
+                isAxiosError: isAxiosError(error),
+            });
 
             const errorMessage = isAxiosError(error)
                 ? `Failed to scan token: ${error.response?.data?.message || error.message}`
                 : "An unexpected error occurred while scanning the token.";
+
+            console.log(error);
 
             await callback({
                 text: errorMessage,
@@ -208,7 +235,7 @@ export const scanTokenAction: Action = {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "Can you analyze this token: So11111111111111111111111111111111111111112",
+                    text: "Can you analyze this token: 97RggLo3zV5kFGYW4yoQTxr4Xkz4Vg2WPHzNYXXWpump",
                 },
             },
             {
@@ -223,7 +250,7 @@ export const scanTokenAction: Action = {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "What's the price of $BONK?",
+                    text: "What's do you think about this token: 97RggLo3zV5kFGYW4yoQTxr4Xkz4Vg2WPHzNYXXWpump",
                 },
             },
             {
