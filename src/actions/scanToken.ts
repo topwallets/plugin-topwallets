@@ -73,10 +73,6 @@ export const scanTokenAction: Action = {
             throw new Error("Callback is required for scanToken action");
         }
 
-        console.log("scanToken action", {
-            state,
-        });
-
         const source = state.source as Source;
         const text = (message.content as Content).text;
         const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
@@ -188,10 +184,9 @@ export const scanTokenAction: Action = {
                         analysisText += ` ${changeIcon} ${change.toFixed(1)}%\n`;
                     }
                 }
-
-                analysisText += `\n🔍 View more top wallets: https://www.topwallets.ai/solana/token/${address}\n`;
             }
 
+            analysisText += `\n🔍 View more top wallets: https://www.topwallets.ai/solana/token/${address}\n`;
             analysisText += `\n🔍 View detailed chart: ${chartUrl}`;
 
             await callback({
