@@ -28,6 +28,11 @@ export const scanWalletAction: Action = {
             return false;
         }
 
+        const trimmedText = text.trim();
+        if (trimmedText.match(solanaAddressRegex)?.[0] === trimmedText) {
+            return false;
+        }
+
         return solanaAddressRegex.test(text);
     },
     handler: async (

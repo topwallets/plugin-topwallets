@@ -267,5 +267,20 @@ export const scanTokenAction: Action = {
                 },
             },
         ],
+        [
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "79yTpy8uwmAkrdgZdq6ZSBTvxKsgPrNqTLvYQBh1pump",
+                },
+            },
+            {
+                user: "{{user2}}",
+                content: {
+                    text: "Let me look up the details of this token and give you my analysis...",
+                    action: "SCAN_TOKEN",
+                },
+            },
+        ],
     ],
 };
