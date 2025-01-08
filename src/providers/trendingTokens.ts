@@ -8,7 +8,7 @@ import {
     ModelClass,
     Provider,
     State,
-} from "@ai16z/eliza";
+} from "@elizaos/core";
 import { TopWalletsAPI, validTimeframes } from "../services/topwallets-api";
 import {
     isTrendingTokenParams,
