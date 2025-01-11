@@ -14,5 +14,5 @@ export const topwalletsPlugin: Plugin = {
         "A plugin for Eliza that provides solana trading data and analysis.",
     actions: [scanWalletAction, scanTokenAction],
     evaluators: [],
-    providers: [rulesProvider, trendingTokensProvider],
+    providers: [trendingTokensProvider],
 };
