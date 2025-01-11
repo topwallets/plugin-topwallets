@@ -6,7 +6,7 @@ import {
     IAgentRuntime,
     Memory,
     State,
-} from "@ai16z/eliza";
+} from "@elizaos/core";
 import { isAxiosError } from "axios";
 import { TopWalletsAPI } from "../services/topwallets-api";
 

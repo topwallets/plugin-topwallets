@@ -4,7 +4,7 @@ import {
     IAgentRuntime,
     ModelClass,
     State,
-} from "@ai16z/eliza";
+} from "@elizaos/core";
 import { TokenResponse } from "../types";
 
 export function formatNumber(num: number | null): string {
